@@ -7,7 +7,7 @@ spring:
   application:
     name: opms-backend
   profiles:
-    active: prod
+    active: dev
   servlet:
     multipart:
       max-file-size: 10MB
@@ -72,4 +72,4 @@ spring:
     show-sql: false
     properties:
       hibernate:
-        dialect: org.hibernate.dialect.MySQLDialect
+        dialect: com.opms.config.CustomMySQLDialect
