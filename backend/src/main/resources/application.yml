@@ -15,21 +15,29 @@ spring:
   mail:
     host: ${SPRING_MAIL_HOST:smtp.gmail.com}
     port: ${SPRING_MAIL_PORT:587}
-    username: ${SPRING_MAIL_USERNAME:buvibuvi346@gmail.com}
-    password: ${SPRING_MAIL_PASSWORD:laoauctokclzsetd}
+    # Never hardcode credentials here — set SPRING_MAIL_USERNAME and SPRING_MAIL_PASSWORD as env vars
+    username: ${SPRING_MAIL_USERNAME:}
+    password: ${SPRING_MAIL_PASSWORD:}
     properties:
       mail:
         smtp:
           auth: true
           starttls:
             enable: true
+            required: true
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
+          ssl:
+            trust: smtp.gmail.com
 
 opms:
   jwt:
     secret: 9a2f8c4e7b1a5d3f6e8c0b2d4f6a8c1e3b5d7f9a2c4e6b8d0f2a4c6e8b0d2f4a
     expiration-ms: 86400000
   mail:
-    from: ${SPRING_MAIL_USERNAME:buvibuvi346@gmail.com}
+    # Falls back to SPRING_MAIL_USERNAME if SPRING_MAIL_FROM is not set
+    from: ${SPRING_MAIL_FROM:}
     enabled: ${MAIL_ENABLED:true}
 
 ---

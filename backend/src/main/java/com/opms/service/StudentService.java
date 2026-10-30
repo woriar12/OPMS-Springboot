@@ -9,10 +9,14 @@ import com.opms.exception.ResourceNotFoundException;
 import com.opms.repository.DepartmentRepository;
 import com.opms.repository.StudentRepository;
 import com.opms.repository.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import jakarta.persistence.criteria.Predicate;
 import java.security.SecureRandom;
@@ -23,6 +27,8 @@ import java.util.stream.Collectors;
 
 @Service
 public class StudentService {
+
+    private static final Logger log = LoggerFactory.getLogger(StudentService.class);
 
     private static final String CHAR_LOWER = "abcdefghijklmnopqrstuvwxyz";
     private static final String CHAR_UPPER = CHAR_LOWER.toUpperCase();
@@ -101,18 +107,37 @@ public class StudentService {
 
         Student savedStudent = studentRepository.save(student);
 
-        CompletableFuture.runAsync(() -> {
-            try {
-                emailService.sendStudentCredentials(email, regNo, tempPassword);
-            } catch (Exception e) {
-                // Log warning silently
-            }
-        });
+        sendCredentialsAfterCommit(email, regNo, tempPassword);
 
         auditLogService.log(adminUser, "CREATE_SINGLE_STUDENT",
                 "Admin created single student: " + savedStudent.getStudentName() + " [" + regNo + "]");
 
         return mapToDto(savedStudent);
+    }
+
+    private void sendCredentialsAfterCommit(String email, String regNo, String tempPassword) {
+        Runnable task = () -> {
+            try {
+                boolean sent = emailService.sendStudentCredentials(email, regNo, tempPassword);
+                if (!sent) {
+                    log.warn("Failed to deliver student credentials to {} for [{}]", EmailService.maskEmail(email), regNo);
+                }
+            } catch (Exception e) {
+                log.error("Exception delivering student credentials to {} for [{}]: {}",
+                        EmailService.maskEmail(email), regNo, e.getMessage(), e);
+            }
+        };
+
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    CompletableFuture.runAsync(task);
+                }
+            });
+        } else {
+            CompletableFuture.runAsync(task);
+        }
     }
 
     private String generateTemporaryPassword() {
@@ -143,13 +168,7 @@ public class StudentService {
         String email = student.getEmail();
         String regNo = student.getRegisterNumber();
 
-        CompletableFuture.runAsync(() -> {
-            try {
-                emailService.sendStudentCredentials(email, regNo, tempPassword);
-            } catch (Exception e) {
-                // Log warning silently
-            }
-        });
+        sendCredentialsAfterCommit(email, regNo, tempPassword);
 
         auditLogService.log(adminUser, "RESEND_STUDENT_CREDENTIALS",
                 "Admin resent credentials for student: " + student.getStudentName() + " [" + regNo + "] to email: " + email);
